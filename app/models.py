@@ -2,6 +2,11 @@ import os
 import json
 import pandas as pd
 import numpy as np
+from config import headers
+from bs4 import BeautifulSoup
+from app.utils import extract_data
+import requests
+from deep_translator import Googletranslator
 
 class Product:
     def __init__(self, product_id, product_name, opinions, stats):
@@ -15,6 +20,35 @@ class Product:
     
     def __repr__(self):
         return f"Product(product_id={self.product_id}, product_name={self.product_name}, opinions=["+",".join(repr(opinion) for opinion in self.opinions)+f"], stats={self.stats})"
+    
+    def extract_opinios(self):
+        next_page = f"https://www.ceneo.pl/{product_id}#tab=reviews"
+all_opinions = []
+while next_page:
+    response = requests.get(next_page, headers = headers)
+    if response.status_code == 200:
+        print(next_page)
+        page_dom = BeautifulSoup(response.text, 'html.parser')
+        opinions = page_dom.select("div.js_product-review:not(.user-post--highlight)")
+        print(len(opinions))
+        for opinion in opinions:
+            single_opinion = Opinion()
+            single_opinion.extract(opinion)
+
+            single_opinion["content_en"] = translate(single_opinion["content"])
+            single_opinion["pros_en"] = [translate(pros) for pros in single_opinion['pros_pl']]
+            single_opinion["cons_en"] = [translate(cons)for cons in single_opinion["cons_pl"]]
+            single_opinion['recommendation'] = True if single_opinion['recommendation'] == 'Polecam' else False if single_opinion['recommendation'] == "Nie polecam" else None
+            single_opinion['stars'] = float(single_opinion["stars"].split("/")[0].replace(',',"."))
+            single_opinion['vote_yes'] = int(single_opinion['vote_yes'])
+            single_opinion['vote_no'] = int(single_opinion['vote_no'])
+            all_opinions.append(single_opinion)
+        try:
+            next_page = "https://www.ceneo.pl" + page_dom.select_one("a.pagination__next")["href"]
+        except TypeError:
+            next_page = None
+    
+
 
     def export_opinions(self):
         if not os.path.exists("./app/data"):
@@ -100,6 +134,13 @@ class Opinion:
     def __repr__(self):
         return "Opinion("+", ".join([f"{key}={str(getattr(self, key))}" for key in self.selectors.keys()])+")"
     
+    def extract(self, opinion_tag):
+        for value, key in self.selectors.items():
+            setattr(self,key, extract_data(opinion_tag, *value))
+
+    
     def transform_to_dict(self):
         return {key: getattr(self, key) for key in self.selectors.keys()}
+    
+
     

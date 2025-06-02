@@ -10,6 +10,9 @@ def index():
 @app.route("/extract")
 def extract():
     form = ExtractForm()
+    if form.validate():
+        product_id = form.product_id_data
+        
     return render_template("extract.html",form=form)
 
 @app.route("/products")
